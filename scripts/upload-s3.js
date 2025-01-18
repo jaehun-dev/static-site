@@ -1,16 +1,17 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { join, extname } from "node:path"
-import { readFile, readdir } from "node:fs/promises"
-import { parseArgs } from "node:util"
+import { join, extname } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { parseArgs } from "node:util";
 import {
   PutObjectCommand,
   S3Client,
   S3ServiceException,
-} from "@aws-sdk/client-s3"
+} from "@aws-sdk/client-s3";
+import { fileTypeFromFile } from "file-type";
 
-import { isMain, validateArgs } from "./node-util.js"
+import { isMain, validateArgs } from "./node-util.js";
 
 const client = new S3Client({
   region: process.env.AWS_S3_REGION,
@@ -18,17 +19,17 @@ const client = new S3Client({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
-})
+});
 
-const bucketName = process.env.AWS_S3_BUCKET_NAME
+const bucketName = process.env.AWS_S3_BUCKET_NAME;
 
 if (isMain(import.meta.url)) {
-  const { errors, results } = loadArgs()
+  const { errors, results } = loadArgs();
 
   if (!errors) {
-    main({ ...results.values })
+    main({ ...results.values });
   } else {
-    console.error(errors.join("\n"))
+    console.error(errors.join("\n"));
   }
 }
 
@@ -37,65 +38,70 @@ function loadArgs() {
     dirname: {
       type: "string",
     },
-  }
-  const results = parseArgs({ options, allowPositionals: true })
-  const { errors } = validateArgs({ options }, results)
+  };
+  const results = parseArgs({ options, allowPositionals: true });
+  const { errors } = validateArgs({ options }, results);
 
-  return { errors, results }
+  return { errors, results };
 }
 
 async function main({ dirname, prefix = "" }) {
-  await uploadDirectory({ currentDir: dirname, prefix })
+  await uploadDirectory({ currentDir: dirname, prefix });
 }
 
 async function uploadDirectory({ currentDir, prefix = "" }) {
   try {
-    const entries = await readdir(currentDir, { withFileTypes: true })
+    const entries = await readdir(currentDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      const entryPath = join(currentDir, entry.name)
-      const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name
+      const entryPath = join(currentDir, entry.name);
+      const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
 
       if (entry.isDirectory()) {
         await uploadDirectory({
           currentDir: entryPath,
           prefix: nextPrefix,
-        })
+        });
       } else if (entry.isFile()) {
         await uploadFile({
           sourceFilePath: entryPath,
           uploadPath: nextPrefix,
-        })
+        });
       }
     }
   } catch (err) {
-    console.error(`Error uploading directory ${currentDir} to S3.\n`, err)
+    console.error(`Error uploading directory ${currentDir} to S3.\n`, err);
   }
 }
 
-// TODO:
-const cacheControls = {
-  ".html": "max-age=10",
-
-  // public 브라우저 캐시가 설정될까?
-  ".js": "public, max-age=60",
-}
+const ContentTypes = {
+  ".html": "text/html",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml; charset=utf-8",
+};
 
 async function uploadFile({ sourceFilePath, uploadPath }) {
-  const ext = extname(sourceFilePath)
-  const cacheControl = cacheControls?.[ext] ?? null
+  const ext = extname(sourceFilePath);
 
-  const command = new PutObjectCommand({
+  let commandObj = {
     Bucket: bucketName,
     Key: uploadPath,
     Body: await readFile(sourceFilePath),
-    CacheControl: cacheControl,
-  })
+    ContentType: await fileTypeFromFile(sourceFilePath).mime,
+  };
+
+  /** @see https://github.com/sindresorhus/file-type?tab=readme-ov-file#supported-file-types */
+  if (ContentTypes?.[ext]) {
+    commandObj["ContentType"] = ContentTypes[ext];
+  }
+
+  const command = new PutObjectCommand(commandObj);
 
   try {
-    const response = await client.send(command)
+    const response = await client.send(command);
 
-    console.log(response)
+    console.log(response);
   } catch (caught) {
     if (
       caught instanceof S3ServiceException &&
@@ -105,13 +111,13 @@ async function uploadFile({ sourceFilePath, uploadPath }) {
         `Error from S3 while uploading object to ${bucketName}. \
 The object was too large. To upload objects larger than 5GB, use the S3 console (160GB max) \
 or the multipart upload API (5TB max).`
-      )
+      );
     } else if (caught instanceof S3ServiceException) {
       console.error(
         `Error from S3 while uploading object to ${bucketName}.  ${caught.name}: ${caught.message}`
-      )
+      );
     } else {
-      throw caught
+      throw caught;
     }
   }
 }
