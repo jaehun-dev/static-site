@@ -81,6 +81,11 @@ const ContentTypes = {
   ".svg": "image/svg+xml; charset=utf-8",
 };
 
+const CacheControl = {
+  ".html": "max-age=180",
+  ".js": "private, max-age=180",
+};
+
 async function uploadFile({ sourceFilePath, uploadPath }) {
   const ext = extname(sourceFilePath);
 
@@ -94,6 +99,10 @@ async function uploadFile({ sourceFilePath, uploadPath }) {
   /** @see https://github.com/sindresorhus/file-type?tab=readme-ov-file#supported-file-types */
   if (ContentTypes?.[ext]) {
     commandObj["ContentType"] = ContentTypes[ext];
+  }
+
+  if (CacheControl?.[ext]) {
+    commandObj["CacheControl"] = CacheControl[ext];
   }
 
   const command = new PutObjectCommand(commandObj);
