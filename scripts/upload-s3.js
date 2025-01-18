@@ -82,7 +82,6 @@ const ContentTypes = {
 };
 
 const CacheControl = {
-  ".html": "max-age=180",
   ".js": "private, max-age=180",
   ".css": "private, max-age=180",
 };
