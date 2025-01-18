@@ -1,7 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { readFile, readdir } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import {
   PutObjectCommand,
@@ -19,17 +20,7 @@ const client = new S3Client({
   },
 })
 
-const loadArgs = () => {
-  const options = {
-    dirname: {
-      type: "string",
-    },
-  }
-  const results = parseArgs({ options, allowPositionals: true })
-  const { errors } = validateArgs({ options }, results)
-
-  return { errors, results }
-}
+const bucketName = process.env.AWS_S3_BUCKET_NAME
 
 if (isMain(import.meta.url)) {
   const { errors, results } = loadArgs()
@@ -41,11 +32,23 @@ if (isMain(import.meta.url)) {
   }
 }
 
-const main = async ({ dirname, prefix = "" }) => {
+function loadArgs() {
+  const options = {
+    dirname: {
+      type: "string",
+    },
+  }
+  const results = parseArgs({ options, allowPositionals: true })
+  const { errors } = validateArgs({ options }, results)
+
+  return { errors, results }
+}
+
+async function main({ dirname, prefix = "" }) {
   await uploadDirectory({ currentDir: dirname, prefix })
 }
 
-const uploadDirectory = async ({ currentDir, prefix = "" }) => {
+async function uploadDirectory({ currentDir, prefix = "" }) {
   try {
     const entries = await readdir(currentDir, { withFileTypes: true })
 
@@ -70,9 +73,7 @@ const uploadDirectory = async ({ currentDir, prefix = "" }) => {
   }
 }
 
-const bucketName = process.env.AWS_S3_BUCKET_NAME
-
-const uploadFile = async ({ sourceFilePath, uploadPath }) => {
+async function uploadFile({ sourceFilePath, uploadPath }) {
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: uploadPath,
