@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { join } from "node:path"
+import { join, extname } from "node:path"
 import { readFile, readdir } from "node:fs/promises"
 import { parseArgs } from "node:util"
 import {
@@ -73,11 +73,23 @@ async function uploadDirectory({ currentDir, prefix = "" }) {
   }
 }
 
+// TODO:
+const cacheControls = {
+  ".html": "max-age=10",
+
+  // public 브라우저 캐시가 설정될까?
+  ".js": "public, max-age=60",
+}
+
 async function uploadFile({ sourceFilePath, uploadPath }) {
+  const ext = extname(sourceFilePath)
+  const cacheControl = cacheControls?.[ext] ?? null
+
   const command = new PutObjectCommand({
     Bucket: bucketName,
     Key: uploadPath,
     Body: await readFile(sourceFilePath),
+    CacheControl: cacheControl,
   })
 
   try {
